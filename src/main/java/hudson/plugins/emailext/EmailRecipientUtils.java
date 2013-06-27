@@ -13,6 +13,10 @@ import hudson.EnvVars;
 import hudson.model.User;
 import hudson.tasks.Mailer;
 import hudson.util.FormValidation;
+import java.util.Collection;
+import jenkins.model.Jenkins;
+import org.acegisecurity.GrantedAuthority;
+import org.acegisecurity.userdetails.UserDetails;
 import org.apache.commons.lang.StringUtils;
 
 public class EmailRecipientUtils {
@@ -61,6 +65,41 @@ public class EmailRecipientUtils {
                 internetAddresses.addAll(to);
             }
 
+            final Set<InternetAddress> members = new LinkedHashSet<InternetAddress>();
+            final Set<InternetAddress> groups = new LinkedHashSet<InternetAddress>();
+            
+            final Set<String> users = new LinkedHashSet<String>();
+            for(User user : User.getAll()) {
+                users.add(user.getId());
+            }
+           
+            for(InternetAddress address : internetAddresses) {
+                String addr = address.getAddress();
+                
+                if (!addr.contains("@") && !users.contains(addr)) {
+                    boolean isGroup = false;
+                    
+                    for(String userId : users) {
+                        UserDetails details = Jenkins.getInstance().getSecurityRealm().loadUserByUsername(userId);
+                        for (GrantedAuthority authority : details.getAuthorities()) {
+                           
+                            if (addr.equals(authority.getAuthority())) {
+                                isGroup = true;
+                                members.add(new InternetAddress(userId));
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if (isGroup) {
+                        groups.add(address);
+                    }
+                }
+            }
+            
+            internetAddresses.removeAll(groups);
+            internetAddresses.addAll(members);
+            
             for(InternetAddress address : internetAddresses) {
                 if(!address.getAddress().contains("@")) {
                     User u = User.get(address.getAddress(), false);
