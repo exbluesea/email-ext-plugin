@@ -11,12 +11,13 @@ import javax.mail.internet.MimeUtility;
 
 import hudson.EnvVars;
 import hudson.model.User;
+import hudson.security.GroupDetails;
 import hudson.tasks.Mailer;
 import hudson.util.FormValidation;
-import java.util.Collection;
 import jenkins.model.Jenkins;
 import org.acegisecurity.GrantedAuthority;
 import org.acegisecurity.userdetails.UserDetails;
+import org.acegisecurity.userdetails.UsernameNotFoundException;
 import org.apache.commons.lang.StringUtils;
 
 public class EmailRecipientUtils {
@@ -31,6 +32,30 @@ public class EmailRecipientUtils {
     public Set<InternetAddress> convertRecipientString(String recipientList, EnvVars envVars)
             throws AddressException, UnsupportedEncodingException {
         return convertRecipientString(recipientList, envVars, TO);
+    }
+    
+    public boolean isGroup(String name)
+    {
+        GroupDetails detail = null;
+        
+        try {
+            detail = Jenkins.getInstance().getSecurityRealm().loadGroupByGroupname(name);
+        } catch (UsernameNotFoundException e) {
+            
+        }
+        
+        return detail != null;
+    }
+    
+    public UserDetails getUserDetails(String name)
+    {
+        try {
+            return Jenkins.getInstance().getSecurityRealm().loadUserByUsername(name);
+        } catch (UsernameNotFoundException e) {
+            
+        } 
+        
+        return null;
     }
     
     public Set<InternetAddress> convertRecipientString(String recipientList, EnvVars envVars, int type)
@@ -77,22 +102,23 @@ public class EmailRecipientUtils {
                 String addr = address.getAddress();
                 
                 if (!addr.contains("@") && !users.contains(addr)) {
-                    boolean isGroup = false;
+                    boolean isGroup = this.isGroup(addr);
+                  
+                    if (!isGroup) {
+                        continue;
+                    }
                     
+                    groups.add(address);
                     for(String userId : users) {
-                        UserDetails details = Jenkins.getInstance().getSecurityRealm().loadUserByUsername(userId);
+                        UserDetails details = this.getUserDetails(userId);
+                        if (details == null) continue;
+                        
                         for (GrantedAuthority authority : details.getAuthorities()) {
-                           
                             if (addr.equals(authority.getAuthority())) {
-                                isGroup = true;
                                 members.add(new InternetAddress(userId));
                                 break;
                             }
                         }
-                    }
-                    
-                    if (isGroup) {
-                        groups.add(address);
                     }
                 }
             }
